@@ -9,6 +9,11 @@ contract WavePortal {
     address owner;
 
     /*
+     * We will be using this below to help generate a random number
+     */
+    uint256 private seed;
+
+    /*
      * A little magic, Google what events are in Solidity!
      */
     event NewWave(address indexed from, uint timestamp, string message);
@@ -29,9 +34,19 @@ contract WavePortal {
      */
     Wave[] public waves;
 
-    constructor() {
+    /*
+     * This is an address => uint mapping, meaning I can associate an address with a number!
+     * In this case, I'll be storing the address with the last time the user waved at us.
+     */
+    mapping(address => uint256) public lastWavedAt;
+
+    constructor() payable {
         owner = msg.sender;
-        console.log("I AM SMART CONTRACT. POG.");
+        console.log("We have been constructed!");
+        /*
+         * Set the initial seed
+         */
+        seed = (block.timestamp + block.difficulty) % 100;
     }
 
     modifier onlyOwner {
@@ -45,13 +60,52 @@ contract WavePortal {
      * sends us from the frontend!
      */
     function wave(string memory _message) public {
+        /*
+         * We need to make sure the current timestamp is at least 15-minutes bigger than the last timestamp we stored
+         */
+        require(
+            lastWavedAt[msg.sender] + 15 minutes < block.timestamp,
+            "Wait 15m"
+        );
+
+        /*
+         * Update the current timestamp we have for the user
+         */
+        lastWavedAt[msg.sender] = block.timestamp;
+
         totalWaves += 1;
-        console.log("%s waved w/ message %s", msg.sender, _message);
+        console.log("%s has waved!", msg.sender);
         
         /*
          * This is where I actually store the wave data in the array.
          */
         waves.push(Wave(msg.sender, _message, block.timestamp));
+
+
+        /*
+         * Generate a new seed for the next user that sends a wave
+         */
+        seed = (block.difficulty + block.timestamp + seed) % 100;
+
+        console.log("Random # generated: %d", seed);
+
+        /*
+         * Give a 50% chance that the user wins the prize.
+         */
+        if (seed <= 50) {
+            console.log("%s won!", msg.sender);
+
+            /*
+             * The same code we had before to send the prize.
+             */
+            uint256 prizeAmount = 0.0001 ether;
+            require(
+                prizeAmount <= address(this).balance,
+                "Trying to withdraw more money than the contract has."
+            );
+            (bool success, ) = (msg.sender).call{value: prizeAmount}("");
+            require(success, "Failed to withdraw money from contract.");
+        }
 
         /*
          * I added some fanciness here, Google it and try to figure out what it is!
@@ -73,16 +127,5 @@ contract WavePortal {
         // We'll also print it over in run.js as well.
         console.log("We have %d total waves!", totalWaves);
         return totalWaves;
-    }
-
-    function userWaves() public view returns (uint256) {
-        uint userWave = 0;
-        for (uint i = 0; i < waves.length; i++) {
-            if (waves[i].waver == msg.sender) {
-                userWave += 1;
-            }
-        }
-        console.log("User %s waves %d", msg.sender, userWave);
-        return userWave;
     }
 }
